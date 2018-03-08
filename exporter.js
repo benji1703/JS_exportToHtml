@@ -1,21 +1,18 @@
-import {getClipboardRepresentation} from '../actions/entity';
-const INSPECTOR = require('../lib/inspector.js');
+// TODO: remove all external scripts from header (done),
+// remove canvas(done),
+// remove divs(done), 
+// empty a-scene attributes(done)
 
-/**
- * Get scene name
- * @param  {Element} scene Scene element
- * @return {string}       Scene ID or slugify from the current path
- */
-export function getSceneName (scene) {
+function exportSceneToHTML() {
+  var sceneName = getSceneName(AFRAME.scenes[0]);
+  saveString(generateHtml(), sceneName + ".html", 'text/html');
+}
+
+function getSceneName(scene) {
   return scene.id || slugify(window.location.host + window.location.pathname);
 }
 
-/**
- * Slugify the string removing non-word chars and spaces
- * @param  {string} text String to slugify
- * @return {string}      Slugified string
- */
-function slugify (text) {
+function slugify(text) {
   return text.toString().toLowerCase()
     .replace(/\s+/g, '-')           // Replace spaces with -
     .replace(/[^\w\-]+/g, '-')      // Replace all non-word chars with -
@@ -24,67 +21,66 @@ function slugify (text) {
     .replace(/-+$/, '');            // Trim - from end of text
 }
 
-/**
- * Generate a filtered stringify HTML from the current page
- * @return {string} String that contains the filtered HTML of the current page
- */
-export function generateHtml () {
-  // flushToDOM first because the elements are posibilly modified by user in Inspector.
+function generateHtml() {
   var sceneEl = AFRAME.scenes[0];
-  sceneEl.flushToDOM(true);
-
   var parser = new window.DOMParser();
   var xmlDoc = parser.parseFromString(document.documentElement.innerHTML, 'text/html');
-
-  // Remove all the components that are being injected by aframe-inspector or aframe
-  // @todo Use custom class to prevent this hack
+  // Remove all the components that are ;being injected by aframe-inspector or aframe
   var elementsToRemove = xmlDoc.querySelectorAll([
     // Injected by the inspector
-    '[data-aframe-inspector]',
-    'script[src$="aframe-inspector.js"]',
+    'script[type$="text/javascript"]',                                         // Remove header
     'style[type="text/css"]',
-    'link[href="http://fonts.googleapis.com/css?family=Roboto%7CRoboto+Mono"]',
-    // Injected by aframe
+    'div[class$="react-redux-modal"]',
+    'span[class$="redux-toastr"]',
+    'link[href="https://fonts.googleapis.com/css?family=Nunito+Sans:200,200i,300,300i,400,400i,600,600i,700,700i,800,800i,900,900i"]',  // Remove header
+    // // Injected by aframe
     '[aframe-injected]',
-    'style[data-href$="aframe.css"]',
-    // Injected by stats
-    '.rs-base',
-    '.a-canvas',
-    'style[data-href$="rStats.css"]'
+    'a',
+    'link',
+    'span',
+    'meta',
   ].join(','));
   for (var i = 0; i < elementsToRemove.length; i++) {
     var el = elementsToRemove[i];
     el.parentNode.removeChild(el);
   }
 
-  var root = xmlDoc.documentElement; // eslint-disable-line no-unused-vars
-  var sceneTemp = xmlDoc.createElement('a-scene-temp');
+  // Empty a-scene attributes
+  var ascene = xmlDoc.getElementsByTagName('a-scene')[0];
+  var eascene = xmlDoc.createElement('a-scene');
+  eascene.innerHTML = ascene.innerHTML;
+  ascene.parentNode.appendChild(eascene);
+  ascene.parentNode.removeChild(ascene);
 
+  // Remove all divs
+  y = xmlDoc.getElementsByTagName("div");
+  for (i = 0; i < y.length; i++) {
+  xmlDoc.documentElement.removeChild(y[i]);
+  }
+  
+  // Inject only a-scene
+  ascene.parentNode.appendChild(eascene);
+
+  var root = xmlDoc.documentElement;
   var scene = xmlDoc.getElementsByTagName('a-scene')[0];
 
-  scene.parentNode.replaceChild(sceneTemp, scene);
-
-  // Activate the previous scene camera, and prevent the inspector from reactive its camera
-  INSPECTOR.opened = false;
-  INSPECTOR.currentCameraEl.setAttribute('camera', 'active', true);
-
   var output = xmlToString(xmlDoc)
-    .replace('<a-scene-temp></a-scene-temp>', getClipboardRepresentation(sceneEl))
-    .replace('aframe-inspector-opened', '');
-
-  // Activate the inspector camera again
-  INSPECTOR.opened = true;
-  INSPECTOR.inspectorCameraEl.setAttribute('camera', 'active', true);
-
   return output;
 }
 
-/**
- * Returns the string representation of a XML
- * @param  {Document} xmlData XML to stringify
- * @return {string}         String representation of the XML document
- */
-function xmlToString (xmlData) {
+function saveString(text, filename, mimeType) {
+  var link = document.createElement('a');
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  function save(blob, filename) {
+    link.href = URL.createObjectURL(blob);
+    link.download = filename || 'ascene.html';
+    link.click();
+  }
+  save(new Blob([text], { type: mimeType }), filename);
+}
+
+function xmlToString(xmlData) {
   var xmlString;
   // IE
   if (window.ActiveXObject) {
@@ -93,5 +89,6 @@ function xmlToString (xmlData) {
     // Mozilla, Firefox, Opera, etc.
     xmlString = (new window.XMLSerializer()).serializeToString(xmlData);
   }
+  xmlString.replace(/^\s*\n/gm, "\n");
   return xmlString;
 }
